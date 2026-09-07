@@ -1,6 +1,6 @@
 # OpenAI Terminal Agent
 
-A small personal command-line agent powered by the OpenAI Responses API. It can chat, read text files, list workspace files, and ask before running **every** shell command.
+A small personal command-line agent powered by the OpenAI Responses API. It can chat, read text files, list workspace files, list the currently authenticated GitHub account's repositories, and ask before running **every** shell command.
 
 ## Setup (Windows PowerShell)
 
