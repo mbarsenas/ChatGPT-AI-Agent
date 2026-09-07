@@ -19,6 +19,59 @@ const client = new OpenAI();
 const rl = readline.createInterface({ input, output });
 let previousResponseId;
 
+const paint = {
+  reset: "\x1b[0m", dim: "\x1b[2m", bold: "\x1b[1m",
+  cyan: "\x1b[38;5;51m", blue: "\x1b[38;5;75m", violet: "\x1b[38;5;141m",
+  green: "\x1b[38;5;84m", amber: "\x1b[38;5;220m", red: "\x1b[38;5;203m"
+};
+
+function shorten(value, limit) {
+  return value.length > limit ? `…${value.slice(-(limit - 1))}` : value;
+}
+
+function divider() {
+  return `${paint.dim}${paint.blue}${"─".repeat(Math.min(Math.max((output.columns || 88) - 2, 40), 88))}${paint.reset}`;
+}
+
+function renderConsole() {
+  const workspace = shorten(ROOT, 68);
+  console.log(`\n${paint.cyan}${paint.bold}╭─ S A B L E${paint.reset} ${paint.dim}// OPENAI OPERATOR CONSOLE${paint.reset}`);
+  console.log(`${paint.cyan}│${paint.reset} ${paint.green}● ONLINE${paint.reset}   ${paint.dim}model${paint.reset} ${paint.violet}${model}${paint.reset}   ${paint.dim}host${paint.reset} ${os.hostname()}`);
+  console.log(`${paint.cyan}│${paint.reset} ${paint.dim}workspace${paint.reset} ${workspace}`);
+  console.log(`${paint.cyan}╰─${paint.reset} ${paint.dim}/help  commands  •  /reset  new session  •  /exit  disconnect${paint.reset}`);
+  console.log(`${divider()}\n`);
+}
+
+function showHelp() {
+  console.log(`${paint.cyan}${paint.bold}COMMAND PALETTE${paint.reset}\n`);
+  console.log(`  ${paint.violet}/help${paint.reset}    Show this menu`);
+  console.log(`  ${paint.violet}/status${paint.reset}  Show workspace and session status`);
+  console.log(`  ${paint.violet}/clear${paint.reset}   Clear and redraw the console`);
+  console.log(`  ${paint.violet}/reset${paint.reset}   Start a new conversation`);
+  console.log(`  ${paint.violet}/exit${paint.reset}    Disconnect\n`);
+}
+
+function showStatus() {
+  console.log(`\n${paint.cyan}${paint.bold}SYSTEM STATUS${paint.reset}`);
+  console.log(`  ${paint.green}●${paint.reset} API session: ${previousResponseId ? "active" : "new"}`);
+  console.log(`  ${paint.green}●${paint.reset} Model: ${model}`);
+  console.log(`  ${paint.green}●${paint.reset} Workspace: ${ROOT}\n`);
+}
+
+function startThinking(label = "Sable is thinking") {
+  const frames = ["◐", "◓", "◑", "◒"];
+  let index = 0;
+  const draw = () => output.write(`\r\x1b[2K${paint.violet}${frames[index++ % frames.length]}${paint.reset} ${paint.dim}${label}…${paint.reset}`);
+  draw();
+  const timer = setInterval(draw, 110);
+  return () => { clearInterval(timer); output.write("\r\x1b[2K"); };
+}
+
+async function withThinking(action, label) {
+  const stop = startThinking(label);
+  try { return await action(); } finally { stop(); }
+}
+
 const tools = [
   {
     type: "function",
@@ -69,7 +122,9 @@ function cap(text) {
 }
 
 async function runShell(command) {
-  const approved = await rl.question(`\nAgent requests this command:\n  ${command}\nAllow? (y/N) `);
+  console.log(`\n${paint.amber}${paint.bold}▸ COMMAND APPROVAL REQUIRED${paint.reset}`);
+  console.log(`${paint.dim}  ${command}${paint.reset}`);
+  const approved = await rl.question(`${paint.amber}  Allow this command? (y/N) ${paint.reset}`);
   if (!/^(y|yes)$/i.test(approved.trim())) return "User declined the command.";
 
   const shell = process.platform === "win32" ? "powershell.exe" : "/bin/sh";
@@ -103,22 +158,26 @@ async function executeTool(call) {
   }
 }
 
-console.log(`=== OpenAI Terminal Agent ===\nWorkspace: ${ROOT}\nModel: ${model}\nCommands: /reset, /exit\n`);
+renderConsole();
 
 while (true) {
-  const message = await rl.question("you> ");
+  const message = await rl.question(`${paint.cyan}${paint.bold}you${paint.reset} ${paint.dim}›${paint.reset} `);
   if (!message.trim()) continue;
-  if (message.trim() === "/exit") break;
-  if (message.trim() === "/reset") { previousResponseId = undefined; console.log("Conversation reset.\n"); continue; }
+  const command = message.trim().toLowerCase();
+  if (command === "/exit") break;
+  if (command === "/help") { showHelp(); continue; }
+  if (command === "/status") { showStatus(); continue; }
+  if (command === "/clear") { output.write("\x1Bc"); renderConsole(); continue; }
+  if (command === "/reset") { previousResponseId = undefined; console.log(`${paint.green}● Session reset.${paint.reset}\n`); continue; }
 
   try {
-    let response = await client.responses.create({
+    let response = await withThinking(() => client.responses.create({
       model,
       instructions: `You are a helpful personal terminal agent. Your workspace is ${ROOT}. Use tools only when useful. Never claim a command ran unless its tool result says it did.`,
       tools,
       previous_response_id: previousResponseId,
       input: message
-    });
+    }));
 
     while (response.output.some((item) => item.type === "function_call")) {
       const calls = response.output.filter((item) => item.type === "function_call");
@@ -126,13 +185,13 @@ while (true) {
       for (const call of calls) {
         outputs.push({ type: "function_call_output", call_id: call.call_id, output: await executeTool(call) });
       }
-      response = await client.responses.create({ model, tools, previous_response_id: response.id, input: outputs });
+      response = await withThinking(() => client.responses.create({ model, tools, previous_response_id: response.id, input: outputs }), "Sable is processing tools");
     }
 
     previousResponseId = response.id;
-    console.log(`\nagent> ${response.output_text || "(no text response)"}\n`);
+    console.log(`\n${paint.violet}${paint.bold}sable${paint.reset} ${paint.dim}›${paint.reset} ${response.output_text || "(no text response)"}\n`);
   } catch (error) {
-    console.error(`\nRequest failed: ${error.message}\n`);
+    console.error(`\n${paint.red}✕ Request failed:${paint.reset} ${error.message}\n`);
   }
 }
 
