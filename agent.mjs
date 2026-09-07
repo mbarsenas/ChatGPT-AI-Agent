@@ -121,6 +121,13 @@ async function withThinking(action, label) {
   try { return await action(); } finally { stop(); }
 }
 
+async function approveAction(title, detail) {
+  console.log(`\n${paint.amber}${paint.bold}▸ ${title}${paint.reset}`);
+  console.log(`${paint.dim}  ${detail}${paint.reset}`);
+  const approved = await rl.question(`${paint.amber}  Allow? (y/N) ${paint.reset}`);
+  return /^(y|yes)$/i.test(approved.trim());
+}
+
 const tools = [
   {
     type: "function",
@@ -183,10 +190,7 @@ function cap(text) {
 }
 
 async function runShell(command) {
-  console.log(`\n${paint.amber}${paint.bold}▸ COMMAND APPROVAL REQUIRED${paint.reset}`);
-  console.log(`${paint.dim}  ${command}${paint.reset}`);
-  const approved = await rl.question(`${paint.amber}  Allow this command? (y/N) ${paint.reset}`);
-  if (!/^(y|yes)$/i.test(approved.trim())) return "User declined the command.";
+  if (!await approveAction("COMMAND APPROVAL REQUIRED", command)) return "User declined the command.";
 
   const shell = process.platform === "win32" ? "powershell.exe" : "/bin/sh";
   const args = process.platform === "win32" ? ["-NoProfile", "-Command", command] : ["-lc", command];
@@ -204,6 +208,34 @@ async function runShell(command) {
   });
 }
 
+async function listGitHubRepositories() {
+  try {
+    const gitConfig = await fs.readFile(path.join(ROOT, ".git", "config"), "utf8");
+    const origin = gitConfig.match(/url\s*=\s*(.+github\.com[/:]([^/]+)\/[^\s]+)\s*$/m);
+    const owner = origin?.[2];
+    if (!owner) return "Unable to determine the GitHub owner from this workspace's origin remote.";
+
+    if (!await approveAction("GITHUB LOOKUP", `Retrieve public repositories for ${owner} from api.github.com`)) {
+      return "User declined the GitHub repository lookup.";
+    }
+
+    const response = await fetch(`https://api.github.com/users/${owner}/repos?per_page=100&sort=updated`, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "Sable-Terminal-Agent" }
+    });
+    if (!response.ok) return `GitHub lookup failed: ${response.status} ${response.statusText}`;
+    const repos = await response.json();
+    return JSON.stringify(repos.map((repo) => ({
+      name: repo.full_name,
+      visibility: repo.visibility,
+      updated_at: repo.updated_at,
+      url: repo.html_url,
+      description: repo.description || null
+    })));
+  } catch (error) {
+    return `GitHub lookup failed: ${error.message}`;
+  }
+}
+
 async function executeTool(call) {
   try {
     const args = JSON.parse(call.arguments);
@@ -214,7 +246,7 @@ async function executeTool(call) {
     }
     if (call.name === "run_command") return await runShell(args.command);
     if (call.name === "list_github_repositories") {
-      return await runShell("$origin = git config --get remote.origin.url; if ($origin -notmatch 'github\\.com[/:]([^/]+)/') { throw 'No GitHub owner could be inferred from origin.' }; $owner = $Matches[1]; $repos = Invoke-RestMethod -Headers @{ 'User-Agent' = 'Sable-Terminal-Agent' } -Uri \"https://api.github.com/users/$owner/repos?per_page=100&sort=updated\"; $repos | ForEach-Object { [string]::Join(\"`t\", @($_.full_name, $_.visibility, $_.updated_at, $_.html_url, $_.description)) }");
+      return await listGitHubRepositories();
     }
     return `Unknown tool: ${call.name}`;
   } catch (error) {
