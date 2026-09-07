@@ -157,6 +157,18 @@ const tools = [
       required: ["command"],
       additionalProperties: false
     }
+  },
+  {
+    type: "function",
+    name: "list_github_repositories",
+    description: "List repositories for the GitHub account currently authenticated with the GitHub CLI. Use this whenever the user asks for their GitHub repositories.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false
+    }
   }
 ];
 
@@ -201,6 +213,9 @@ async function executeTool(call) {
       return entries.map((entry) => `${entry.isDirectory() ? "[dir] " : "      "}${entry.name}`).join("\n") || "(empty directory)";
     }
     if (call.name === "run_command") return await runShell(args.command);
+    if (call.name === "list_github_repositories") {
+      return await runShell("gh repo list --limit 100 --json nameWithOwner,description,visibility,updatedAt,url --jq '.[] | [.nameWithOwner, .visibility, .updatedAt, .url, (.description // \"\")] | @tsv'");
+    }
     return `Unknown tool: ${call.name}`;
   } catch (error) {
     return `Tool error: ${error.message}`;
@@ -223,7 +238,7 @@ while (true) {
   try {
     let response = await withThinking(() => client.responses.create({
       model,
-      instructions: `You are a helpful personal terminal agent. Your workspace is ${ROOT}. Use tools only when useful. Never claim a command ran unless its tool result says it did.`,
+      instructions: `You are a helpful personal terminal agent. Your workspace is ${ROOT}. Use tools only when useful. Use list_github_repositories whenever the user asks for their GitHub repositories; it uses their authenticated GitHub CLI session, so do not ask them for a username first. Never claim a command ran unless its tool result says it did.`,
       tools,
       previous_response_id: previousResponseId,
       input: message
