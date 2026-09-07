@@ -214,7 +214,7 @@ async function executeTool(call) {
     }
     if (call.name === "run_command") return await runShell(args.command);
     if (call.name === "list_github_repositories") {
-      return await runShell("gh repo list --limit 100 --json nameWithOwner,description,visibility,updatedAt,url --jq '.[] | [.nameWithOwner, .visibility, .updatedAt, .url, (.description // \"\")] | @tsv'");
+      return await runShell("$owner = gh api user --jq '.login'; gh repo list $owner --limit 100 --json nameWithOwner,description,visibility,updatedAt,url --jq '.[] | [.nameWithOwner, .visibility, .updatedAt, .url, (.description // \"\")] | @tsv'");
     }
     return `Unknown tool: ${call.name}`;
   } catch (error) {
@@ -238,7 +238,7 @@ while (true) {
   try {
     let response = await withThinking(() => client.responses.create({
       model,
-      instructions: `You are a helpful personal terminal agent. Your workspace is ${ROOT}. Use tools only when useful. Use list_github_repositories whenever the user asks for their GitHub repositories; it uses their authenticated GitHub CLI session, so do not ask them for a username first. Never claim a command ran unless its tool result says it did.`,
+      instructions: `You are a helpful personal terminal agent. Your workspace is ${ROOT}. Use tools only when useful. Use list_github_repositories whenever the user asks for their GitHub repositories; it uses their authenticated GitHub CLI session, so do not ask them for a username first. After a successful result, summarize the returned repositories directly and do not propose another command. Never claim a command ran unless its tool result says it did.`,
       tools,
       previous_response_id: previousResponseId,
       input: message
