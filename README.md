@@ -47,6 +47,7 @@ The agent cannot read outside `AGENT_ROOT` (or its launch folder by default). Co
 ## Console controls
 
 - `/help` — command palette
+- `/menu` — interactive quick actions for browsing files, reading files, project health, and approved PowerShell commands
 - `/status` — active model, workspace, and session state
 - `/clear` — redraw the operator console
 - `/reset` — start a fresh conversation
