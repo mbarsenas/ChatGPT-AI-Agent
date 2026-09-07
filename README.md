@@ -42,4 +42,12 @@ Examples:
 - `read package.json and tell me how to run this project`
 - `check git status`
 
-The agent cannot read outside `AGENT_ROOT` (or its launch folder by default). Commands execute only after you type `y` or `yes` at the prompt. Use `/reset` to start a fresh conversation and `/exit` to quit.
+The agent cannot read outside `AGENT_ROOT` (or its launch folder by default). Commands execute only after you type `y` or `yes` at the prompt.
+
+## Console controls
+
+- `/help` — command palette
+- `/status` — active model, workspace, and session state
+- `/clear` — redraw the operator console
+- `/reset` — start a fresh conversation
+- `/exit` — quit
