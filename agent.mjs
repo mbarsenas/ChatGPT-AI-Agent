@@ -38,7 +38,7 @@ function renderConsole() {
   console.log(`\n${paint.cyan}${paint.bold}╭─ S A B L E${paint.reset} ${paint.dim}// OPENAI OPERATOR CONSOLE${paint.reset}`);
   console.log(`${paint.cyan}│${paint.reset} ${paint.green}● ONLINE${paint.reset}   ${paint.dim}model${paint.reset} ${paint.violet}${model}${paint.reset}   ${paint.dim}host${paint.reset} ${os.hostname()}`);
   console.log(`${paint.cyan}│${paint.reset} ${paint.dim}workspace${paint.reset} ${workspace}`);
-  console.log(`${paint.cyan}╰─${paint.reset} ${paint.dim}/help  commands  •  /reset  new session  •  /exit  disconnect${paint.reset}`);
+  console.log(`${paint.cyan}╰─${paint.reset} ${paint.dim}/menu  quick actions  •  /help  commands  •  /exit  disconnect${paint.reset}`);
   console.log(`${divider()}\n`);
 }
 
@@ -46,9 +46,58 @@ function showHelp() {
   console.log(`${paint.cyan}${paint.bold}COMMAND PALETTE${paint.reset}\n`);
   console.log(`  ${paint.violet}/help${paint.reset}    Show this menu`);
   console.log(`  ${paint.violet}/status${paint.reset}  Show workspace and session status`);
+  console.log(`  ${paint.violet}/menu${paint.reset}    Open the interactive quick-action menu`);
   console.log(`  ${paint.violet}/clear${paint.reset}   Clear and redraw the console`);
   console.log(`  ${paint.violet}/reset${paint.reset}   Start a new conversation`);
   console.log(`  ${paint.violet}/exit${paint.reset}    Disconnect\n`);
+}
+
+async function browseWorkspace() {
+  try {
+    const entries = await fs.readdir(ROOT, { withFileTypes: true });
+    const formatted = entries
+      .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))
+      .map((entry) => `${entry.isDirectory() ? `${paint.cyan}▸${paint.reset}` : `${paint.dim}·${paint.reset}`} ${entry.name}`);
+    console.log(`\n${paint.cyan}${paint.bold}WORKSPACE CONTENTS${paint.reset} ${paint.dim}${ROOT}${paint.reset}`);
+    console.log(formatted.join("\n") || `${paint.dim}(empty)${paint.reset}`);
+    console.log();
+  } catch (error) {
+    console.error(`${paint.red}✕ Unable to read workspace:${paint.reset} ${error.message}\n`);
+  }
+}
+
+async function readFileFromMenu() {
+  const filePath = await rl.question(`${paint.cyan}  File path ${paint.dim}(relative to workspace)${paint.reset}: `);
+  if (!filePath.trim()) return;
+  try {
+    const contents = cap(await fs.readFile(insideRoot(filePath.trim()), "utf8"));
+    console.log(`\n${paint.cyan}${paint.bold}FILE // ${filePath.trim()}${paint.reset}\n${contents}\n`);
+  } catch (error) {
+    console.error(`${paint.red}✕ Unable to read file:${paint.reset} ${error.message}\n`);
+  }
+}
+
+async function openMenu() {
+  console.log(`${paint.cyan}${paint.bold}QUICK ACTIONS${paint.reset}`);
+  console.log(`  ${paint.violet}1${paint.reset}  Browse workspace`);
+  console.log(`  ${paint.violet}2${paint.reset}  Read a file`);
+  console.log(`  ${paint.violet}3${paint.reset}  Check project health ${paint.dim}(git status)${paint.reset}`);
+  console.log(`  ${paint.violet}4${paint.reset}  Run a PowerShell command ${paint.dim}(approval required)${paint.reset}`);
+  console.log(`  ${paint.violet}5${paint.reset}  System status`);
+  console.log(`  ${paint.violet}6${paint.reset}  Start a new conversation`);
+  console.log(`  ${paint.dim}0  Return to chat${paint.reset}`);
+  const choice = (await rl.question(`${paint.cyan}${paint.bold}select${paint.reset} ${paint.dim}›${paint.reset} `)).trim();
+
+  if (choice === "1") await browseWorkspace();
+  else if (choice === "2") await readFileFromMenu();
+  else if (choice === "3") console.log(`\n${paint.cyan}${paint.bold}PROJECT HEALTH${paint.reset}\n${await runShell("git status --short --branch")}\n`);
+  else if (choice === "4") {
+    const command = await rl.question(`${paint.cyan}  PowerShell command${paint.reset}: `);
+    if (command.trim()) console.log(`\n${await runShell(command.trim())}\n`);
+  }
+  else if (choice === "5") showStatus();
+  else if (choice === "6") { previousResponseId = undefined; console.log(`${paint.green}● Session reset.${paint.reset}\n`); }
+  else if (choice !== "0") console.log(`${paint.amber}Unknown selection.${paint.reset}\n`);
 }
 
 function showStatus() {
@@ -167,6 +216,7 @@ while (true) {
   if (command === "/exit") break;
   if (command === "/help") { showHelp(); continue; }
   if (command === "/status") { showStatus(); continue; }
+  if (command === "/menu") { await openMenu(); continue; }
   if (command === "/clear") { output.write("\x1Bc"); renderConsole(); continue; }
   if (command === "/reset") { previousResponseId = undefined; console.log(`${paint.green}● Session reset.${paint.reset}\n`); continue; }
 
